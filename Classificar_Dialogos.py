@@ -40,7 +40,7 @@ def classificar_dialogos(dialogos: list):
         
 
         print(f"Inicio: {inicio}, total: {num_dialogos}, razão: {inicio / num_dialogos}")
-        entrada = "\n\n".join(dialogos[inicio: inicio + 6])
+        entrada = "\n\n".join(dialogos[inicio: inicio + 50])
         resposta = assistant.ask(entrada)
         temas_encontrados = loads(resposta['text']['value'])['temas']
 
