@@ -1,0 +1,7 @@
+.venv/
+.env
+audio.py
+dialogo.txt
+teste.wav
+func.py
+main.py
