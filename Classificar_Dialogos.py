@@ -37,8 +37,6 @@ def classificar_dialogos(dialogos: list):
     #assert(num_dialogos == 12)
 
     while inicio < len(dialogos):
-        
-
         print(f"Inicio: {inicio}, total: {num_dialogos}, razão: {inicio / num_dialogos}")
         entrada = "\n\n".join(dialogos[inicio: inicio + 50])
         resposta = assistant.ask(entrada)
@@ -47,7 +45,7 @@ def classificar_dialogos(dialogos: list):
         for i, tema in enumerate(temas_encontrados):
             print(f'Tema encontrado: {tema}')
 
-            if i == len(temas_encontrados) -1 and tema['indice_fim'] < num_dialogos:
+            if i == len(temas_encontrados) -1 and tema['indice_fim'] < num_dialogos and len(temas_encontrados) > 1:
                 inicio = tema['indice_inicio']
                 break
 
