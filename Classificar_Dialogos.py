@@ -2,6 +2,7 @@ import streamlit as st
 from assistant import Assistant
 from json import loads
 from io import BytesIO
+import pandas as pd
 
 def principal():
     st.header("Classificação de Dialogos")
@@ -20,9 +21,9 @@ def principal():
 
     if len(temas.keys()) > 0:
         st.subheader("Baixar Classificações")
-        tema = st.selectbox('Selecionar arquivo', temas.keys())
-        
-        st.download_button(label=f'Baixar Arquivo: {tema}', data=gerar_arquivo(tema, temas[tema]), file_name=f'{tema}.txt')
+        tipo = st.selectbox('Selecionar tipo do arquivo', ["txt", "csv"])
+        if tipo:
+            st.download_button(label=f'Baixar Arquivo {tipo}', data=gerar_arquivo_completo(temas, tipo), file_name=f'classificação.{tipo}')
 
 def classificar_dialogos(dialogos: list):
     texto_barra = 'Classificando os diálogos'
@@ -63,9 +64,7 @@ def classificar_dialogos(dialogos: list):
         barra_progresso.progress((inicio / num_dialogos), text=texto_barra)
     return temas
 
-def gerar_arquivo(nome: str, dados: dict):  
-    # {'Introdução': ['1 \n00:00:00,000 --> 00:00:04,000\nEntrevistador:\nBom dia, Sr. Carlos! Obrigado por dedicar seu tempo para essa entrevista.', '2\n00:00:04,001 --> 
-    # stador:\nSr. Carlos, quais são os problemas mais urgentes que a empresa está enfrentando atualmente?']}
+def gerar_arquivo(nome: str, dados: dict):
     texto = f"# {nome}"
 
     for subtema in dados.keys():
@@ -76,6 +75,41 @@ def gerar_arquivo(nome: str, dados: dict):
     
     arquivo = BytesIO(bytes(texto, 'utf-8'))
     return arquivo
+
+def gerar_arquivo_completo(dados: dict, tipo: str):
+    texto = ""
+    if tipo == "txt":
+        for tema in dados.keys():
+            texto += f"# {tema}\n"
+
+            for subtema in dados[tema].keys():
+                texto += f"\n## {subtema}"
+                texto_dialogo = "\n\n".join(dados[tema][subtema])
+                texto += f"\n {texto_dialogo}\n"
+            texto += '\n----\n\n'
+               
+        arquivo = BytesIO(bytes(texto, 'utf-8'))
+
+        return arquivo
+    
+    if tipo == "csv":
+        linhas = []
+        
+        for tema in dados.keys():
+            for subtema in dados[tema].keys():
+                for dialogo in dados[tema][subtema]:
+                    linhas.append(
+                        {
+                            "Tema": tema,
+                            "Subtema": subtema,
+                            "Dialogo": dialogo
+                        }
+                    )
+        df = pd.DataFrame(linhas)
+        arquivo = BytesIO()
+        df.to_csv(arquivo, index=False, sep=";")
+
+        return arquivo
 
 def main():
     st.set_page_config(page_icon="🏷")
