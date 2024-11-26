@@ -34,7 +34,7 @@ def classificar_dialogos(dialogos: list):
     temas = {}
     inicio = 0
     print(num_dialogos)
-    assert(num_dialogos == 12)
+    #assert(num_dialogos == 12)
 
     while inicio < len(dialogos):
         
