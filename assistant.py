@@ -1,4 +1,5 @@
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, APIConnectionError, \
+RateLimitError, AuthenticationError
 
 class Assistant():
     def __init__(self, assistant_id):
@@ -15,12 +16,10 @@ class Assistant():
         print("Thread encerrada!")
 
     def ask(self, question: str) -> str:
-        self.client.beta.threads.messages.create(
-            thread_id= self.thread.id,
-            content=question,
-            role='user'
-        )
         run = self.client.beta.threads.runs.create(
+            additional_messages = [
+                {"role": 'user', "content": question}
+            ],
             thread_id=self.thread.id,
             assistant_id=self.assistant.id,
             stream=True
@@ -30,7 +29,6 @@ class Assistant():
             pass
 
         mensagem = self.client.beta.threads.messages.list(self.thread.id, limit=1)
-
         return mensagem.data[0].content[0].model_dump()
     
     def get(self) -> object:
@@ -82,9 +80,3 @@ class Assistant():
             return True
         except:
             return False
-
-class Topico(list):
-    def __init__(self, titulo):
-        super.__init__(super())
-        self.titulo = titulo
-

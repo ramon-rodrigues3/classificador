@@ -1,10 +1,11 @@
 import streamlit as st
 from assistant import Assistant
-from json import loads
-from io import BytesIO
-import pandas as pd
+from json import loads, JSONDecodeError
+from gr_documentos import gerar_arquivo_completo
+from time import sleep
 
-def principal():
+def page_principal() -> None:
+    st.set_page_config(page_icon="🏷")
     st.header("Classificação de Dialogos")
 
     arquivo = st.file_uploader("Seu arquivo", ['txt'])
@@ -12,7 +13,11 @@ def principal():
     temas = st.session_state.get('temas', {})
 
     if arquivo and executar:
-        conteudo = bytes.decode(arquivo.read()).replace('\r\n', '\n')
+        try: 
+            conteudo = bytes.decode(arquivo.read()).replace('\r\n', '\n')
+        except UnicodeDecodeError as e: 
+            st.error(f"{e}: Erro ao decodificar o arquivo!")
+        
         dialogos = conteudo.split('\n\n')
         temas = classificar_dialogos(dialogos)
         st.session_state['temas'] = temas
@@ -25,95 +30,77 @@ def principal():
         if tipo:
             st.download_button(label=f'Baixar Arquivo {tipo}', data=gerar_arquivo_completo(temas, tipo), file_name=f'classificação.{tipo}')
 
-def classificar_dialogos(dialogos: list):
+def classificar_dialogos(dialogos: list) -> dict:
     texto_barra = 'Classificando os diálogos'
     barra_progresso = st.progress(0, text=texto_barra)
+    try:
+        assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP')
+    except Exception as e:
+        st.error(f"Erro ao se conectar a API da OpenAI: {e}")
+        st.stop()
 
-    # Classificação
-    assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP')
     num_dialogos = len(dialogos)
     temas = {}
     inicio = 0
-    print(num_dialogos)
-    #assert(num_dialogos == 12)
 
     while inicio < len(dialogos):
-        print(f"Inicio: {inicio}, total: {num_dialogos}, razão: {inicio / num_dialogos}")
         entrada = "\n\n".join(dialogos[inicio: inicio + 50])
-        resposta = assistant.ask(entrada)
-        temas_encontrados = loads(resposta['text']['value'])['temas']
 
+        try:
+            resposta = tentar(2, assistant.ask, [entrada])
+        except Exception as e:
+            st.error(f"Erro ao se conectar a API da OpenAI: {e}")
+            st.stop()
+
+        try:
+            temas_encontrados = loads(resposta['text']['value'])['temas']
+        except JSONDecodeError as e: 
+            st.error(f"{e}: Erro ao decodificar a classificação!")
+
+        num_temas = len(temas_encontrados)
         for i, tema in enumerate(temas_encontrados):
-            print(f'Tema encontrado: {tema}')
+            tema_inicio = tema['indice_inicio']
+            tema_fim = tema['indice_fim']
+            nome_tema = tema['tema']
+            dialogos_tema = dialogos[tema_inicio -1: tema_fim + 1]
 
-            if i == len(temas_encontrados) -1 and tema['indice_fim'] < num_dialogos and len(temas_encontrados) > 1:
-                inicio = tema['indice_inicio']
+            if (
+                i == num_temas - 1 and tema_fim < num_dialogos 
+                and num_temas > 1 and  tema_inicio != i
+            ):
+                inicio = tema_inicio
                 break
 
-            if tema['tema'] not in temas.keys():
-                temas[tema['tema']] = {tema['subtema']: dialogos[tema['indice_inicio'] -1: tema['indice_fim'] + 1]}
+            if nome_tema not in temas.keys():
+                temas[nome_tema] = {
+                    tema['subtema']: dialogos_tema
+                }
             else:
-                temas[tema['tema']].update(
-                {tema['subtema']: dialogos[tema['indice_inicio'] -1: tema['indice_fim'] + 1]})
+                temas[nome_tema].update(
+                    {
+                        tema['subtema']: dialogos_tema
+                    }
+                )
             
-            if tema['indice_fim'] == num_dialogos:
+            if tema_fim == num_dialogos:
                 inicio = num_dialogos 
-                print(f'Fim!')
                 break
     
         barra_progresso.progress((inicio / num_dialogos), text=texto_barra)
+    
     return temas
 
-def gerar_arquivo(nome: str, dados: dict):
-    texto = f"# {nome}"
-
-    for subtema in dados.keys():
-        texto += f"\n## {subtema}"
-        texto_dialogo = "\n\n".join(dados[subtema])
-        texto += f"\n {texto_dialogo}"
-        texto += '\n'
-    
-    arquivo = BytesIO(bytes(texto, 'utf-8'))
-    return arquivo
-
-def gerar_arquivo_completo(dados: dict, tipo: str):
-    texto = ""
-    if tipo == "txt":
-        for tema in dados.keys():
-            texto += f"# {tema}\n"
-
-            for subtema in dados[tema].keys():
-                texto += f"\n## {subtema}"
-                texto_dialogo = "\n\n".join(dados[tema][subtema])
-                texto += f"\n {texto_dialogo}\n"
-            texto += '\n----\n\n'
-               
-        arquivo = BytesIO(bytes(texto, 'utf-8'))
-
-        return arquivo
-    
-    if tipo == "csv":
-        linhas = []
-        
-        for tema in dados.keys():
-            for subtema in dados[tema].keys():
-                for dialogo in dados[tema][subtema]:
-                    linhas.append(
-                        {
-                            "Tema": tema,
-                            "Subtema": subtema,
-                            "Dialogo": dialogo
-                        }
-                    )
-        df = pd.DataFrame(linhas)
-        arquivo = BytesIO()
-        df.to_csv(arquivo, index=False, sep=";")
-
-        return arquivo
+def tentar(vezes: int, funcao: callable, argumentos: list):
+    for i in range(vezes):
+        try:
+            return funcao(*argumentos)
+        except Exception as e:
+            if i == vezes -1:
+                raise e
+            sleep(4)
 
 def main():
-    st.set_page_config(page_icon="🏷")
-    principal()
+    page_principal()
 
 if __name__ == "__main__":
     main()

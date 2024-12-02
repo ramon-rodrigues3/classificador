@@ -1,16 +1,18 @@
 import streamlit as st
-from google import generativeai as genai
+from openai import OpenAI
 from io import BytesIO
 
 def gerar_transcricao(file, prompt=''):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    file = genai.upload_file(path=file, mime_type=f"audio/{file.name[-3:]}")
-    prompt = f'{prompt}. Generate a speech transcript in SRT format. Add the name of the interlocutors if available.'
+    client = OpenAI()
+    response = client.audio.transcriptions.create(
+        file= file,
+        model="whisper-1",
+        response_format="srt",
+        language="pt",
+        prompt = prompt,
+    )
 
-    response = model.generate_content([prompt, file])
-    genai.delete_file(file.name)
-
-    return response.text
+    return response
 
 def main():
     st.header("Transcreva audio em Texto",divider='gray')
