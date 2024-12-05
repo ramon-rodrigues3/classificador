@@ -8,19 +8,19 @@ def page_principal() -> None:
     st.set_page_config(page_icon="🏷")
     st.header("Classificação de Dialogos")
 
-    arquivo = st.file_uploader("Seu arquivo", ['txt'])
+    arquivos = st.file_uploader("Seu arquivo", ['txt'], accept_multiple_files=True)
     executar = st.button('Executar Classificação')
     temas = st.session_state.get('temas', {})
-
-    if arquivo and executar:
-        try: 
-            conteudo = bytes.decode(arquivo.read()).replace('\r\n', '\n')
-        except UnicodeDecodeError as e: 
-            st.error(f"{e}: Erro ao decodificar o arquivo!")
-        
-        dialogos = conteudo.split('\n\n')
-        temas = classificar_dialogos(dialogos)
-        st.session_state['temas'] = temas
+    if arquivos and executar:
+        for arquivo in arquivos:
+            try: 
+                conteudo = bytes.decode(arquivo.read()).replace('\r\n', '\n')
+            except UnicodeDecodeError as e: 
+                st.error(f"{e}: Erro ao decodificar o arquivo!")
+            
+            dialogos = conteudo.split('\n\n')
+            temas.update(classificar_dialogos(dialogos))
+            st.session_state['temas'] = temas
 
     st.divider()
 

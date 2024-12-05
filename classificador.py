@@ -1,28 +1,15 @@
 from assistant import Assistant
 from json import loads, JSONDecodeError
-from gr_documentos import gerar_arquivo_completo
-from time import sleep
+from tenacity import Retrying, RetryError, stop_after_attempt
 
-def classificar_dialogos(dialogos: list) -> dict:
-    try:
-        assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP')
-    except Exception as e:
-        pass
+def classificar_dialogos(dicionario: dict, temas_encontrados: dict) -> None:
+    num_temas = len(temas_encontrados)
 
-    num_dialogos = len(dialogos)
-    temas = {}
-    inicio = 0
-
-    while inicio < len(dialogos):
-        entrada = "\n\n".join(dialogos[inicio: inicio + 50])
-        resposta = tentar(2, assistant.ask, [entrada])
-        temas_encontrados = loads(resposta['text']['value'])['temas']
-
-        num_temas = len(temas_encontrados)
-        for i, tema in enumerate(temas_encontrados):
+    for i, tema in enumerate(temas_encontrados):
             tema_inicio = tema['indice_inicio']
             tema_fim = tema['indice_fim']
             nome_tema = tema['tema']
+            
             dialogos_tema = dialogos[tema_inicio -1: tema_fim + 1]
 
             if (
@@ -47,14 +34,5 @@ def classificar_dialogos(dialogos: list) -> dict:
                 inicio = num_dialogos 
                 break
 
+
     return temas
-
-
-def tentar(vezes: int, funcao: callable, argumentos: list):
-    for i in range(vezes):
-        try:
-            return funcao(*argumentos)
-        except Exception as e:
-            if i == vezes -1:
-                raise e
-            sleep(4)
