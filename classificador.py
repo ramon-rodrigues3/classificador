@@ -36,3 +36,4 @@ def classificar_dialogos(dicionario: dict, temas_encontrados: dict) -> None:
 
 
     return temas
+

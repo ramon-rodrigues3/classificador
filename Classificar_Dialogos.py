@@ -1,106 +1,147 @@
 import streamlit as st
+import gr_documentos as grd
 from assistant import Assistant
-from json import loads, JSONDecodeError
-from gr_documentos import gerar_arquivo_completo
-from time import sleep
+import json
+from tenacity import stop_after_attempt, wait_fixed, retry_if_exception_type, retry
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5), retry=retry_if_exception_type(Exception))
+def solicitar_assistente(assistant: Assistant, entrada: str, lista):
+    return assistant.get_completion(entrada, lista)
+
+def atualizar_classificacao(dicionario: dict, temas_encontrados: list, dialogos: list) -> None:
+    for item in temas_encontrados:
+        tema = item.get('tema')
+        subtema = item.get('subtema')
+        ind_inicio = item.get('indice_inicio') - 1
+        ind_fim = item.get('indice_fim') - 1
+        trecho = dialogos[ind_inicio: ind_fim + 1]
+
+        if tema in dicionario.keys():
+            if subtema in dicionario[tema].keys():
+                dicionario[tema][subtema].extend(trecho)
+            else:
+                dicionario[tema][subtema] = trecho
+            continue
+
+        dicionario[tema] = {subtema: trecho}
 
 def page_principal() -> None:
-    st.set_page_config(page_icon="🏷")
-    st.header("Classificação de Dialogos")
+    st.subheader("Enviar Arquivo", divider="gray")
 
-    arquivos = st.file_uploader("Seu arquivo", ['txt'], accept_multiple_files=True)
+    classificacao = st.session_state.get('classificacao', {})
+
+    arquivos = st.file_uploader("Seus arquivos", ['txt', 'srt'], accept_multiple_files=True)
     executar = st.button('Executar Classificação')
-    temas = st.session_state.get('temas', {})
+
     if arquivos and executar:
-        for arquivo in arquivos:
-            try: 
-                conteudo = bytes.decode(arquivo.read()).replace('\r\n', '\n')
-            except UnicodeDecodeError as e: 
-                st.error(f"{e}: Erro ao decodificar o arquivo!")
-            
-            dialogos = conteudo.split('\n\n')
-            temas.update(classificar_dialogos(dialogos))
-            st.session_state['temas'] = temas
-
-    st.divider()
-
-    if len(temas.keys()) > 0:
-        st.subheader("Baixar Classificações")
-        tipo = st.selectbox('Selecionar tipo do arquivo', ["txt", "csv"])
-        if tipo:
-            st.download_button(label=f'Baixar Arquivo {tipo}', data=gerar_arquivo_completo(temas, tipo), file_name=f'classificação.{tipo}')
-
-def classificar_dialogos(dialogos: list) -> dict:
-    texto_barra = 'Classificando os diálogos'
-    barra_progresso = st.progress(0, text=texto_barra)
-    try:
-        assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP')
-    except Exception as e:
-        st.error(f"Erro ao se conectar a API da OpenAI: {e}")
-        st.stop()
-
-    num_dialogos = len(dialogos)
-    temas = {}
-    inicio = 0
-
-    while inicio < len(dialogos):
-        entrada = "\n\n".join(dialogos[inicio: inicio + 50])
-
         try:
-            resposta = tentar(2, assistant.ask, [entrada])
+            assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP') 
         except Exception as e:
-            st.error(f"Erro ao se conectar a API da OpenAI: {e}")
+            st.error(f'Erro ao instânciar assistente. Erro: {e}')
             st.stop()
 
-        try:
-            temas_encontrados = loads(resposta['text']['value'])['temas']
-        except JSONDecodeError as e: 
-            st.error(f"{e}: Erro ao decodificar a classificação!")
+        for arquivo in arquivos:
+            st.markdown(f'-> {arquivo.name}')
+            progresso = st.progress(0, 'Classificando arquivo...')
 
-        num_temas = len(temas_encontrados)
-        for i, tema in enumerate(temas_encontrados):
-            tema_inicio = tema['indice_inicio']
-            tema_fim = tema['indice_fim']
-            nome_tema = tema['tema']
-            dialogos_tema = dialogos[tema_inicio -1: tema_fim + 1]
-
-            if (
-                i == num_temas - 1 and tema_fim < num_dialogos 
-                and num_temas > 1 and  tema_inicio != i
-            ):
-                inicio = tema_inicio
-                break
-
-            if nome_tema not in temas.keys():
-                temas[nome_tema] = {
-                    tema['subtema']: dialogos_tema
-                }
-            else:
-                temas[nome_tema].update(
-                    {
-                        tema['subtema']: dialogos_tema
-                    }
-                )
+            try:
+                conteudo = arquivo.read().decode('utf-8').replace('\r\n', '\n').split('\n\n')
+            except UnicodeDecodeError as e:
+                st.error(f'Erro ao decodificar arquivo {arquivo.name}. Verifique se ele está codificado em utf-8')
+                st.stop()
+            except Exception as e:
+                st.error(f'Erro inesperado! Erro: {e}')
             
-            if tema_fim == num_dialogos:
-                inicio = num_dialogos 
-                break
-    
-        barra_progresso.progress((inicio / num_dialogos), text=texto_barra)
-    
-    return temas
+            dialogos = [dialogo for dialogo in conteudo if not dialogo.isspace()]
+            num_dialogos = len(dialogos)
+            inicio = 0
+            
+            while inicio < num_dialogos - 1:
+                entrada = "\n\n".join(dialogos[inicio: inicio + 100])
 
-def tentar(vezes: int, funcao: callable, argumentos: list):
-    for i in range(vezes):
-        try:
-            return funcao(*argumentos)
-        except Exception as e:
-            if i == vezes -1:
-                raise e
-            sleep(4)
+                try:
+                    response = solicitar_assistente(assistant, entrada, classificacao.keys())
+                except Exception as e:
+                    print(e)
+                    st.error(f'Erro de conexão ao GPT após múltiplas tentativas. Erro {e}')
+                    st.stop()
+
+                print(f"\n {response} \n") 
+
+                try:
+                    temas_encontrados = json.loads(response)['temas']
+                except json.decoder.JSONDecodeError as e:
+                    print(e)
+                    st.warning('A IA deu uma resposta inesperada durante a classificação. Tente novamente!')
+                    st.stop() 
+                except:
+                    st.markdown(type(response))
+                
+                num_temas = len(temas_encontrados)
+                
+                if num_temas == 0:
+                    print('A ia respondeu com uma lista vazia')
+                    inicio += 100
+                    continue
+                    # st.warning('A IA deu uma resposta inesperada durante a classificação. Tente novamente!')
+                    # st.stop() 
+
+                try:
+                    ultimo_tema = temas_encontrados[-1]
+                    ut_indice_inicio = ultimo_tema['indice_inicio']
+                    ut_indice_fim = ultimo_tema['indice_fim']
+                    if not isinstance(ut_indice_inicio, int) or not isinstance(ut_indice_fim, int):
+                        raise TypeError('Tipo incompatível')
+                except Exception as e:
+                    print(e)
+                    st.warning('A IA deu uma resposta inesperada durante a classificação. Tente novamente!')
+                    st.stop()
+                
+                try: 
+                    if num_temas > 1 and temas_encontrados[-1]['indice_fim'] < num_dialogos:
+                        if ut_indice_inicio <= inicio:
+                            raise ValueError('Valor inválido. Loop infinito evitado.')
+                        temas_encontrados = temas_encontrados[:-1]
+                        atualizar_classificacao(classificacao, temas_encontrados, dialogos)
+                        inicio = ut_indice_inicio - 1
+                    else:
+                        if ut_indice_fim <= inicio:
+                            raise ValueError('Valor inválido. Loop infinito evitado.')
+                        atualizar_classificacao(classificacao, temas_encontrados, dialogos)
+                        inicio = ut_indice_fim - 1
+                except Exception as e:
+                    print(e)
+                    st.warning('A IA deu uma resposta inesperada durante a classificação. Tente novamente!')
+                    st.stop()
+
+                final = inicio + 101 if inicio + 101 < num_dialogos else num_dialogos
+                progresso.progress(inicio/num_dialogos, f'classificando diálogos {inicio + 1}  a {final}...')
+            progresso.progress(1.0, 'Classificação Concluída.')
+        st.session_state['classificacao'] = classificacao
+        st.success("Classificação bem sucedida!")
+
+@st.fragment
+def page_classificacao() -> None:
+    st.subheader("Download", divider="gray")
+    temas = st.session_state.get('classificacao', {})
+
+    if len(temas.keys()) > 0:
+
+        tipo = st.selectbox('Selecionar tipo do arquivo', ["txt", "csv"])
+        
+        if tipo:
+            st.download_button(label=f'Baixar Arquivo {tipo}', data=grd.gerar_arquivo_completo(temas, tipo), file_name=f'classificação.{tipo}')
+    else:
+        st.info("Nenhuma classificação registrada.")
 
 def main():
-    page_principal()
+    st.set_page_config(layout='wide')
+    colunas = st.columns(2, gap='large')
+
+    with colunas[0]:
+        page_principal()
+    with colunas[1]:
+        page_classificacao()
 
 if __name__ == "__main__":
     main()
