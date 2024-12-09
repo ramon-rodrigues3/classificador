@@ -3,46 +3,84 @@ import gr_documentos as grd
 from assistant import Assistant
 import json
 from tenacity import stop_after_attempt, wait_fixed, retry_if_exception_type, retry
+from pydantic import BaseModel
+from enum import Enum
+
+class TipoEnum(str, Enum):
+    solucao = "solução"
+    problema = "problema"
+    outro = "outro"
+
+class Tema(BaseModel):
+    tema: str
+    topico: str
+    subtopico: str
+    descricao: str
+    tipo: TipoEnum
+    indice_inicio: int
+    indice_fim: int
+
+class ListaTemas(BaseModel):
+    temas: list[Tema]
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5), retry=retry_if_exception_type(Exception))
 def solicitar_assistente(assistant: Assistant, entrada: str, lista):
     prompt = f"""
-        Dados os diálogos, enviados pelo usuário, divida a conversa em trechos por tema e responda com uma lista onde estarão contidos, o tema geral do trecho, um subtema, o índice do primeiro dialogo daquele tema e o índice do último. Caso você não consiga determinar um tema retorne uma lista vazia.
+        Dados os diálogos enviados pelo usuário, divida cada diálogo em três categorias: solução, problema e outro.
+        Antes de classificar os diálogos nessas categorias, cada trecho deve ser classificado em um tema geral, tópico e subtópico.
+
+        - Primeiro, determine o tema geral, tópico e subtópico de cada diálogo.
+        - Em seguida, divida o trecho em três partes:
+            - **Solução**: Caso o diálogo trate de resolução ou sugestão de uma solução.
+            - **Problema**: Caso o diálogo trate de dificuldades ou questões não resolvidas.
+            - **Outro**: Caso o diálogo não se encaixe nas categorias de solução ou problema.
+
+        Cada trecho classificado deve conter as seguintes informações:
+        1. **Tema geral do trecho**: Tema, tópico e subtópico do diálogo.
+        2. **Descrição do subtópico**: Breve descrição que ajude a entender o contexto do subtópico.
+        3. **Índice do primeiro diálogo do trecho**: Índice do primeiro diálogo que pertence ao trecho.
+        4. **Índice do último diálogo do trecho**: Índice do último diálogo que pertence ao trecho.
+
+        Cada subtópico provávelmente terá um trecho de solução e outro de problema
 
         Temas já encontrados:
         {lista}
 
-        Diálogos: 
+        Diálogos:
         {entrada}
+
+        Caso você não consiga determinar sequer um tema nesses diálogos, retorne uma lista vazia.
         """
-    return assistant.get_completion(prompt)
+    return assistant.get_completion(prompt, ListaTemas)
 
 def atualizar_classificacao(dicionario: dict, temas_encontrados: list, dialogos: list) -> None:
     for item in temas_encontrados:
         tema = item.get('tema')
-        subtema = item.get('subtema')
+        topico = item.get('topico')
+        subtopico = item.get('subtopico')
+        tipo = item.get('tipo')
+        descricao = item.get('descricao')
         ind_inicio = item.get('indice_inicio') - 1
         ind_fim = item.get('indice_fim') - 1
         trecho = dialogos[ind_inicio: ind_fim + 1]
 
-        if tema in dicionario.keys():
-            if subtema in dicionario[tema].keys():
-                dicionario[tema][subtema].extend(trecho)
-            else:
-                dicionario[tema][subtema] = trecho
-            continue
+        tema_dados = dicionario.setdefault(tema, {})
+        topico_dados = tema_dados.setdefault(topico, {})
+        subtopico_dados = topico_dados.setdefault(subtopico, {})
+        tipo_dados = subtopico_dados.setdefault(tipo, {"dialogos": [], "descricao": ""})
 
-        dicionario[tema] = {subtema: trecho}
+        tipo_dados["dialogos"].extend(trecho)
+
+        tipo_dados["descricao"] = descricao
 
 def page_principal() -> None:
     st.subheader("Enviar Arquivo", divider="gray")
-
-    classificacao = st.session_state.get('classificacao', {})
 
     arquivos = st.file_uploader("Seus arquivos", ['txt', 'srt'], accept_multiple_files=True)
     executar = st.button('Executar Classificação')
 
     if arquivos and executar:
+        classificacao = st.session_state.get('classificacao_v2', {})
         try:
             assistant = Assistant('asst_kpATQ12n8mRYTxmJqewb1KaP') 
         except Exception as e:
@@ -126,20 +164,20 @@ def page_principal() -> None:
                 final = inicio + 101 if inicio + 101 < num_dialogos else num_dialogos
                 progresso.progress(inicio/num_dialogos, f'classificando diálogos {inicio + 1}  a {final}...')
             progresso.progress(1.0, 'Classificação Concluída.')
-        st.session_state['classificacao'] = classificacao
+        st.session_state['classificacao_v2'] = classificacao
         st.success("Classificação bem sucedida!")
 
 @st.fragment
 def page_classificacao() -> None:
     st.subheader("Download", divider="gray")
-    temas = st.session_state.get('classificacao', {})
+    temas = st.session_state.get('classificacao_v2', {})
 
     if len(temas.keys()) > 0:
 
         tipo = st.selectbox('Selecionar tipo do arquivo', ["txt", "csv"])
         
         if tipo:
-            st.download_button(label=f'Baixar Arquivo {tipo}', data=grd.gerar_arquivo_completo(temas, tipo), file_name=f'classificação.{tipo}')
+            st.download_button(label=f'Baixar Arquivo {tipo}', data=grd.gerar_arquivo_completov2(temas, tipo), file_name=f'classificação.{tipo}')
     else:
         st.info("Nenhuma classificação registrada.")
 

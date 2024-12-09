@@ -70,22 +70,11 @@ class Assistant():
             )
             print("Thread encerrada!")
 
-    def get_completion(self, question: str, temas) -> dict:
-
-        question = f"""
-                Dados os diálogos, enviados pelo usuário, divida a conversa em trechos por tema e responda com uma lista onde estarão contidos, o tema geral do trecho, um subtema, o índice do primeiro dialogo daquele tema e o índice do último. Caso você não consiga determinar um tema retorne uma lista vazia.
-
-                Temas já encontrados:
-                {temas}
-
-                Diálogos: 
-                {question}
-                """
-
+    def get_completion(self, question: str, response_format = SaidaEst) -> dict:
         resposta = self.client.beta.chat.completions.parse(
             messages=[{'role': 'user', 'content': question}],
-            model='gpt-4o-mini',
-            response_format=SaidaEst
+            model='gpt-4o',
+            response_format=response_format
         )
 
         if resposta.choices[0].message.refusal:
