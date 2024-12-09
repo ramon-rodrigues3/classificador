@@ -25,33 +25,7 @@ class ListaTemas(BaseModel):
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5), retry=retry_if_exception_type(Exception))
 def solicitar_assistente(assistant: Assistant, entrada: str, lista):
-    prompt = f"""
-        Dados os diálogos enviados pelo usuário, divida cada diálogo em três categorias: solução, problema e outro.
-        Antes de classificar os diálogos nessas categorias, cada trecho deve ser classificado em um tema geral, tópico e subtópico.
-
-        - Primeiro, determine o tema geral, tópico e subtópico de cada diálogo.
-        - Em seguida, divida o trecho em três partes:
-            - **Solução**: Caso o diálogo trate de resolução ou sugestão de uma solução.
-            - **Problema**: Caso o diálogo trate de dificuldades ou questões não resolvidas.
-            - **Outro**: Caso o diálogo não se encaixe nas categorias de solução ou problema.
-
-        Cada trecho classificado deve conter as seguintes informações:
-        1. **Tema geral do trecho**: Tema, tópico e subtópico do diálogo.
-        2. **Descrição do subtópico**: Breve descrição que ajude a entender o contexto do subtópico.
-        3. **Índice do primeiro diálogo do trecho**: Índice do primeiro diálogo que pertence ao trecho.
-        4. **Índice do último diálogo do trecho**: Índice do último diálogo que pertence ao trecho.
-
-        Cada subtópico provávelmente terá um trecho de solução e outro de problema
-
-        Temas já encontrados:
-        {lista}
-
-        Diálogos:
-        {entrada}
-
-        Caso você não consiga determinar sequer um tema nesses diálogos, retorne uma lista vazia.
-        """
-    return assistant.get_completion(prompt, ListaTemas)
+    return assistant.ask(entrada)
 
 def atualizar_classificacao(dicionario: dict, temas_encontrados: list, dialogos: list) -> None:
     for item in temas_encontrados:

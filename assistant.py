@@ -1,62 +1,31 @@
 from openai import OpenAI
 from pydantic import BaseModel
+from enum import Enum
+
+class TipoEnum(str, Enum):
+    solucao = "solução"
+    problema = "problema"
+    outro = "outro"
 
 class Tema(BaseModel):
     tema: str
-    subtema: str
+    topico: str
+    subtopico: str
+    descricao: str
+    tipo: TipoEnum
     indice_inicio: int
     indice_fim: int
 
-class SaidaEst(BaseModel):
+class ListaTemas(BaseModel):
     temas: list[Tema]
-
-def get_response_format() -> dict:
-    schema = {
-        "type": "object",
-        "properties": {
-            "temas": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                "tema": {
-                    "type": "string"
-                },
-                "subtema": {
-                    "type": "string"
-                },
-                "indice_inicio": {
-                    "type": "integer"
-                },
-                "indice_fim": {
-                    "type": "integer"
-                }
-                },
-                "required": ["tema", "subtema", "indice_inicio", "indice_fim"],
-                "additionalProperties": False
-            }
-            }
-        },
-        "required": ["temas"],
-        "additionalProperties": False
-    }
-
-    response_format = {
-        "type": "json_schema",
-        "json_schema": {
-            "name": "Saida",
-            "strict": True,
-            "schema": schema,   
-        }  
-    }
-
-    return response_format
 
 class Assistant():
     def __init__(self, assistant_id) -> None:
         self.client = OpenAI()
         self.assistant = self.client.beta.assistants.retrieve(assistant_id)
-        self.thread = None
+        self.thread = self.thread = self.client.beta.threads.create(
+            messages = []
+        )
     
     def create_thread(self) -> None:
         self.thread = self.client.beta.threads.create(
@@ -70,7 +39,7 @@ class Assistant():
             )
             print("Thread encerrada!")
 
-    def get_completion(self, question: str, response_format = SaidaEst) -> dict:
+    def get_completion(self, question: str, response_format) -> dict:
         resposta = self.client.beta.chat.completions.parse(
             messages=[{'role': 'user', 'content': question}],
             model='gpt-4o',
@@ -89,8 +58,7 @@ class Assistant():
             ],
             thread_id=self.thread.id,
             assistant_id=self.assistant.id,
-            stream=True,
-            response_format=get_response_format()
+            stream=True
         )
 
         for event in run:
