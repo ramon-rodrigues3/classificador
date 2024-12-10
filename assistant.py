@@ -1,23 +1,4 @@
 from openai import OpenAI
-from pydantic import BaseModel
-from enum import Enum
-
-class TipoEnum(str, Enum):
-    solucao = "solução"
-    problema = "problema"
-    outro = "outro"
-
-class Tema(BaseModel):
-    tema: str
-    topico: str
-    subtopico: str
-    descricao: str
-    tipo: TipoEnum
-    indice_inicio: int
-    indice_fim: int
-
-class ListaTemas(BaseModel):
-    temas: list[Tema]
 
 class Assistant():
     def __init__(self, assistant_id) -> None:

@@ -11,11 +11,15 @@ class TipoEnum(str, Enum):
     problema = "problema"
     outro = "outro"
 
+class ContextoEnum(str, Enum):
+    no_contexto = "No contexto"
+    fora_do_contexto = "Fora do contexto"
+
 class Tema(BaseModel):
     tema: str
-    topico: str
-    subtopico: str
+    subtema: str
     descricao: str
+    contexto: ContextoEnum
     tipo: TipoEnum
     indice_inicio: int
     indice_fim: int
@@ -30,22 +34,21 @@ def solicitar_assistente(assistant: Assistant, entrada: str, lista):
 def atualizar_classificacao(dicionario: dict, temas_encontrados: list, dialogos: list) -> None:
     for item in temas_encontrados:
         tema = item.get('tema')
-        topico = item.get('topico')
-        subtopico = item.get('subtopico')
+        subtema = item.get('subtema')
         tipo = item.get('tipo')
         descricao = item.get('descricao')
+        contexto = item.get('contexto')
         ind_inicio = item.get('indice_inicio') - 1
         ind_fim = item.get('indice_fim') - 1
         trecho = dialogos[ind_inicio: ind_fim + 1]
 
         tema_dados = dicionario.setdefault(tema, {})
-        topico_dados = tema_dados.setdefault(topico, {})
-        subtopico_dados = topico_dados.setdefault(subtopico, {})
+        subtopico_dados = tema_dados.setdefault(subtema, {})
         tipo_dados = subtopico_dados.setdefault(tipo, {"dialogos": [], "descricao": ""})
 
         tipo_dados["dialogos"].extend(trecho)
-
         tipo_dados["descricao"] = descricao
+        tipo_dados["contexto"] = contexto
 
 def page_principal() -> None:
     st.subheader("Enviar Arquivo", divider="gray")
